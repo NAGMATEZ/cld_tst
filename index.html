@@ -1,0 +1,1836 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <title>Budget Manager</title>
+
+  <!-- PWA meta -->
+  <meta name="theme-color" content="#0F1729"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+  <meta name="apple-mobile-web-app-title" content="Budget"/>
+  <link rel="apple-touch-icon" href="icon-192.svg"/>
+  <link rel="manifest" href="manifest.json"/>
+
+  <!-- CDN dependencies -->
+  <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   DESIGN TOKENS
+═══════════════════════════════════════════════════════════════ */
+:root {
+  --bg:           #0F1729;
+  --bg-card:      #1A2540;
+  --bg-input:     #0C1220;
+  --border:       #253356;
+  --text:         #F0EDE6;
+  --text-muted:   #8A93AA;
+  --primary:      #00C48C;
+  --primary-dim:  #00C48C22;
+  --warning:      #F5A623;
+  --danger:       #E8384F;
+  --danger-dim:   #E8384F22;
+  --info:         #4A9EFF;
+
+  --radius-sm:    8px;
+  --radius-md:    14px;
+  --radius-lg:    20px;
+
+  --font: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'SF Mono', 'Fira Code', monospace;
+
+  --tab-h: 64px;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RESET & BASE
+═══════════════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+/* Numeric values always use tabular figures */
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* ═══════════════════════════════════════════════════════════════
+   LAYOUT SHELL
+═══════════════════════════════════════════════════════════════ */
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  position: relative;
+}
+
+/* ── Banners ── */
+#pwa-banner {
+  display: none;
+  background: var(--primary);
+  color: #000;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 10px 16px;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+}
+#pwa-banner.show { display: flex; }
+#pwa-banner button {
+  background: #000;
+  color: var(--primary);
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 44px;
+}
+
+#update-toast {
+  display: none;
+  position: fixed;
+  bottom: calc(var(--tab-h) + var(--safe-bottom) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--info);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 600;
+  z-index: 9999;
+  gap: 10px;
+  align-items: center;
+  box-shadow: 0 4px 20px #0008;
+  white-space: nowrap;
+}
+#update-toast.show { display: flex; }
+#update-toast button {
+  background: #fff3;
+  border: 1px solid #fff6;
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  min-height: 32px;
+}
+
+/* ── Pages ── */
+#pages {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: calc(var(--tab-h) + var(--safe-bottom) + 8px);
+  scroll-behavior: smooth;
+}
+
+.page {
+  display: none;
+  padding: 16px;
+  animation: fadeIn .18s ease;
+}
+.page.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ── Tab bar ── */
+#tabbar {
+  height: calc(var(--tab-h) + var(--safe-bottom));
+  padding-bottom: var(--safe-bottom);
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: stretch;
+  flex-shrink: 0;
+}
+
+.tab-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  min-width: 44px;
+  transition: color .15s;
+}
+.tab-btn .icon { font-size: 22px; line-height: 1; }
+.tab-btn.active { color: var(--primary); }
+
+/* ═══════════════════════════════════════════════════════════════
+   CARDS, FORMS, COMMON COMPONENTS
+═══════════════════════════════════════════════════════════════ */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 20px 0 8px;
+}
+.section-title:first-child { margin-top: 4px; }
+
+label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+input, select, textarea {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  padding: 11px 13px;
+  outline: none;
+  transition: border-color .15s;
+  min-height: 44px;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--primary); }
+input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(.7); }
+
+select option { background: var(--bg-card); }
+
+.form-group { margin-bottom: 14px; }
+
+/* Type toggle */
+.type-toggle {
+  display: flex;
+  gap: 8px;
+}
+.type-toggle button {
+  flex: 1;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--border);
+  background: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  min-height: 44px;
+  transition: all .15s;
+}
+.type-toggle button.active.expense { border-color: var(--danger); color: var(--danger); background: var(--danger-dim); }
+.type-toggle button.active.income  { border-color: var(--primary); color: var(--primary); background: var(--primary-dim); }
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 10px 18px;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  transition: opacity .15s, transform .1s;
+}
+.btn:active { transform: scale(.97); }
+
+.btn-primary  { background: var(--primary); color: #000; }
+.btn-danger   { background: var(--danger); color: #fff; }
+.btn-ghost    { background: var(--bg-input); color: var(--text); border: 1px solid var(--border); }
+.btn-full     { width: 100%; }
+.btn-sm       { min-height: 36px; padding: 7px 13px; font-size: 13px; }
+
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* FAB */
+#fab {
+  position: fixed;
+  bottom: calc(var(--tab-h) + var(--safe-bottom) + 16px);
+  right: calc((100% - min(480px, 100%)) / 2 + 16px);
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #000;
+  font-size: 28px;
+  font-weight: 300;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 20px #00C48C55;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  transition: transform .15s;
+}
+#fab:active { transform: scale(.93); }
+
+/* Chips / badges */
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.badge-danger  { background: var(--danger-dim); color: var(--danger); }
+.badge-warning { background: #F5A62322; color: var(--warning); }
+.badge-ok      { background: var(--primary-dim); color: var(--primary); }
+
+/* Transaction list item */
+.tx-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.tx-item:last-child { border-bottom: none; }
+
+.tx-icon {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.tx-meta { flex: 1; min-width: 0; }
+.tx-cat  { font-size: 13px; font-weight: 600; }
+.tx-note { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tx-date { font-size: 11px; color: var(--text-muted); }
+
+.tx-amount { font-size: 15px; font-weight: 700; white-space: nowrap; }
+.tx-amount.expense { color: var(--danger); }
+.tx-amount.income  { color: var(--primary); }
+
+.tx-actions { display: flex; gap: 6px; }
+.tx-actions button { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 17px; min-width: 32px; min-height: 32px; }
+.tx-actions button:hover { color: var(--text); }
+
+/* Progress bar */
+.progress-wrap {
+  background: var(--bg-input);
+  border-radius: 99px;
+  height: 8px;
+  overflow: hidden;
+  margin: 8px 0;
+}
+.progress-bar {
+  height: 100%;
+  border-radius: 99px;
+  background: var(--primary);
+  transition: width .5s ease;
+}
+.progress-bar.warn  { background: var(--warning); }
+.progress-bar.over  { background: var(--danger); }
+
+/* Category row */
+.cat-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+}
+.cat-row:last-child { border-bottom: none; }
+.cat-icon-circle {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.cat-info { flex: 1; min-width: 0; }
+.cat-name { font-size: 14px; font-weight: 600; }
+.cat-limit { font-size: 12px; color: var(--text-muted); }
+.cat-actions { display: flex; gap: 6px; }
+.cat-actions button { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 16px; min-width: 32px; min-height: 32px; }
+
+/* Empty state */
+.empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+}
+.empty .empty-icon { font-size: 48px; margin-bottom: 12px; }
+.empty p { font-size: 14px; }
+
+/* Modal overlay */
+#modal-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: #000a;
+  z-index: 500;
+  align-items: flex-end;
+  justify-content: center;
+}
+#modal-overlay.show { display: flex; }
+
+.modal {
+  background: var(--bg-card);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  padding: 20px 16px calc(20px + var(--safe-bottom));
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  animation: slideUp .22s ease;
+}
+@keyframes slideUp { from { transform: translateY(60px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.modal-title { font-size: 17px; font-weight: 700; }
+.modal-close {
+  background: var(--bg-input);
+  border: none;
+  color: var(--text-muted);
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 18px;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* Onboarding overlay */
+#onboarding {
+  display: none;
+  position: fixed; inset: 0;
+  background: var(--bg);
+  z-index: 600;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  text-align: center;
+}
+#onboarding.show { display: flex; }
+#onboarding h1 { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
+#onboarding p  { color: var(--text-muted); margin-bottom: 28px; font-size: 15px; }
+.currency-choices { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 260px; }
+.currency-choice {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  min-height: 56px;
+  transition: border-color .15s, background .15s;
+}
+.currency-choice:hover { border-color: var(--primary); background: var(--primary-dim); }
+
+/* ═══════════════════════════════════════════════════════════════
+   DASHBOARD
+═══════════════════════════════════════════════════════════════ */
+/* Gauge arc */
+#gauge-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0 4px;
+}
+#gauge-svg { width: 220px; height: 130px; }
+
+.balance-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+.balance-amount {
+  font-size: 28px;
+  font-weight: 800;
+  margin: 2px 0 8px;
+}
+
+.stats-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.stat-box {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 12px;
+}
+.stat-label { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+.stat-val   { font-size: 18px; font-weight: 800; margin-top: 2px; }
+.stat-val.expense { color: var(--danger); }
+.stat-val.income  { color: var(--primary); }
+
+/* Chart */
+#chart-wrap {
+  position: relative;
+  height: 220px;
+}
+
+/* Prediction */
+#prediction-box {
+  border-left: 3px solid var(--warning);
+  background: #F5A62311;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  margin-top: 4px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SAVINGS
+═══════════════════════════════════════════════════════════════ */
+.savings-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.savings-target-label { font-size: 12px; color: var(--text-muted); }
+.savings-amounts { display: flex; align-items: baseline; gap: 6px; margin: 4px 0 10px; }
+.savings-current { font-size: 24px; font-weight: 800; }
+.savings-target  { font-size: 14px; color: var(--text-muted); }
+.savings-pct     { font-size: 13px; font-weight: 700; color: var(--primary); }
+.savings-deadline { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   OCR
+═══════════════════════════════════════════════════════════════ */
+#ocr-drop-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-md);
+  padding: 32px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  margin-bottom: 14px;
+}
+#ocr-drop-zone:hover, #ocr-drop-zone.drag-over {
+  border-color: var(--primary);
+  background: var(--primary-dim);
+}
+#ocr-drop-zone .dz-icon { font-size: 40px; margin-bottom: 10px; }
+#ocr-drop-zone p { font-size: 14px; color: var(--text-muted); }
+#ocr-drop-zone input { display: none; }
+
+#ocr-progress-wrap {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px;
+}
+#ocr-progress-bar-wrap {
+  width: 100%;
+  background: var(--bg-input);
+  border-radius: 99px;
+  height: 6px;
+  overflow: hidden;
+}
+#ocr-progress-bar-inner {
+  height: 100%;
+  border-radius: 99px;
+  background: var(--primary);
+  transition: width .2s;
+}
+#ocr-raw-text {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  white-space: pre-wrap;
+  max-height: 100px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+}
+#ocr-result-form { display: none; }
+</style>
+</head>
+<body>
+
+<!-- ══════════ ONBOARDING ══════════ -->
+<div id="onboarding">
+  <div style="font-size:64px;margin-bottom:16px">💰</div>
+  <h1>Budget Manager</h1>
+  <p>Válaszd ki az alapértelmezett pénznemet</p>
+  <div class="currency-choices">
+    <button class="currency-choice" onclick="finishOnboarding('HUF')">🇭🇺 Magyar Forint (HUF)</button>
+    <button class="currency-choice" onclick="finishOnboarding('EUR')">🇪🇺 Euro (EUR)</button>
+    <button class="currency-choice" onclick="finishOnboarding('USD')">🇺🇸 US Dollar (USD)</button>
+  </div>
+</div>
+
+<!-- ══════════ APP SHELL ══════════ -->
+<div id="app">
+
+  <!-- PWA install banner -->
+  <div id="pwa-banner">
+    <span>📲 Telepítsd az appot a legjobb élményért</span>
+    <button id="pwa-install-btn">Telepítés</button>
+  </div>
+
+  <!-- Update toast (fixed, outside app flow) -->
+  <div id="update-toast">
+    🔄 Frissítés elérhető
+    <button onclick="applyUpdate()">Újratöltés</button>
+  </div>
+
+  <!-- Pages -->
+  <div id="pages">
+
+    <!-- ── DASHBOARD ── -->
+    <div id="page-dashboard" class="page active">
+      <p class="section-title">Áttekintés</p>
+
+      <!-- Balance arc card -->
+      <div class="card" id="gauge-wrap">
+        <svg id="gauge-svg" viewBox="0 0 220 130" xmlns="http://www.w3.org/2000/svg">
+          <!-- Track -->
+          <path id="gauge-track" d="M 20,120 A 90,90 0 0,1 200,120"
+            fill="none" stroke="#1E2D4A" stroke-width="16" stroke-linecap="round"/>
+          <!-- Fill -->
+          <path id="gauge-fill" d="M 20,120 A 90,90 0 0,1 200,120"
+            fill="none" stroke="#00C48C" stroke-width="16" stroke-linecap="round"
+            stroke-dasharray="283" stroke-dashoffset="283"/>
+          <!-- Center label -->
+          <text id="gauge-pct" x="110" y="112" text-anchor="middle"
+            font-size="22" font-weight="800" fill="#F0EDE6" font-family="system-ui">0%</text>
+          <text x="110" y="128" text-anchor="middle"
+            font-size="10" fill="#8A93AA" font-family="system-ui" letter-spacing="1">KIADÁS/LIMIT</text>
+        </svg>
+
+        <p class="balance-label">Havi egyenleg</p>
+        <p class="balance-amount num" id="dash-balance">–</p>
+      </div>
+
+      <!-- Stats row -->
+      <div class="stats-row">
+        <div class="stat-box">
+          <div class="stat-label">Bevétel</div>
+          <div class="stat-val income num" id="dash-income">–</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Kiadás</div>
+          <div class="stat-val expense num" id="dash-expense">–</div>
+        </div>
+      </div>
+
+      <!-- Pie chart -->
+      <div class="card">
+        <p class="section-title" style="margin-top:0">Kiadás kategóriánként</p>
+        <div id="chart-wrap">
+          <canvas id="pie-chart"></canvas>
+        </div>
+        <div id="chart-empty" class="empty" style="display:none">
+          <div class="empty-icon">📊</div>
+          <p>Még nincs kiadás ebben a hónapban</p>
+        </div>
+      </div>
+
+      <!-- Prediction -->
+      <div id="prediction-box">⏳ Adatok betöltése…</div>
+
+      <!-- Limit warnings -->
+      <div id="limit-warnings"></div>
+    </div>
+
+    <!-- ── TRANSACTIONS ── -->
+    <div id="page-transactions" class="page">
+      <p class="section-title">Tranzakciók</p>
+      <div id="tx-list"></div>
+    </div>
+
+    <!-- ── CATEGORIES ── -->
+    <div id="page-categories" class="page">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <p class="section-title" style="margin:0">Kategóriák</p>
+        <button class="btn btn-sm btn-primary" onclick="openCatModal()">+ Új</button>
+      </div>
+      <div id="cat-list"></div>
+    </div>
+
+    <!-- ── SAVINGS ── -->
+    <div id="page-savings" class="page">
+      <p class="section-title">Megtakarítási cél</p>
+      <div id="savings-content"></div>
+    </div>
+
+    <!-- ── OCR ── -->
+    <div id="page-ocr" class="page">
+      <p class="section-title">Bizonylat beolvasása (OCR)</p>
+      <div id="ocr-drop-zone" onclick="document.getElementById('ocr-file-input').click()"
+           ondragover="event.preventDefault();this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="handleOcrDrop(event)">
+        <div class="dz-icon">🔍</div>
+        <p>Koppints a képfeltöltéshez<br><span style="font-size:12px">vagy húzd ide a fájlt</span></p>
+        <input type="file" id="ocr-file-input" accept="image/*" onchange="startOcr(this.files[0])"/>
+      </div>
+
+      <div id="ocr-progress-wrap">
+        <span id="ocr-status-text" style="font-size:13px;color:var(--text-muted)">Szöveg felismerése…</span>
+        <div id="ocr-progress-bar-wrap">
+          <div id="ocr-progress-bar-inner" style="width:0%"></div>
+        </div>
+      </div>
+
+      <!-- Pre-filled editable form from OCR -->
+      <div id="ocr-result-form">
+        <div class="card" style="border-color:var(--info)">
+          <p style="font-size:12px;color:var(--info);font-weight:700;margin-bottom:10px">✅ Felismert adatok — ellenőrizd és mentsd</p>
+          <div id="ocr-raw-text"></div>
+        </div>
+
+        <div class="form-group">
+          <label>Összeg</label>
+          <input type="number" id="ocr-amount" placeholder="0" min="0" step="0.01"/>
+        </div>
+        <div class="form-group">
+          <label>Típus</label>
+          <div class="type-toggle">
+            <button id="ocr-type-expense" class="active expense" onclick="setOcrType('expense')">Kiadás</button>
+            <button id="ocr-type-income" class="" onclick="setOcrType('income')">Bevétel</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Kategória</label>
+          <select id="ocr-category"></select>
+        </div>
+        <div class="form-group">
+          <label>Dátum</label>
+          <input type="date" id="ocr-date"/>
+        </div>
+        <div class="form-group">
+          <label>Megjegyzés</label>
+          <input type="text" id="ocr-note" placeholder="Opcionális"/>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="saveOcrTx()">💾 Mentés</button>
+        <button class="btn btn-ghost btn-full" style="margin-top:8px" onclick="resetOcr()">✕ Mégsem</button>
+      </div>
+    </div>
+
+  </div><!-- /pages -->
+
+  <!-- Tab bar -->
+  <nav id="tabbar">
+    <button class="tab-btn active" onclick="switchTab('dashboard')" id="tab-dashboard">
+      <span class="icon">🏠</span>
+      <span>Főoldal</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('transactions')" id="tab-transactions">
+      <span class="icon">📋</span>
+      <span>Tranzakciók</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('categories')" id="tab-categories">
+      <span class="icon">🏷️</span>
+      <span>Kategóriák</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('savings')" id="tab-savings">
+      <span class="icon">🎯</span>
+      <span>Cél</span>
+    </button>
+    <button class="tab-btn" onclick="switchTab('ocr')" id="tab-ocr">
+      <span class="icon">📷</span>
+      <span>OCR</span>
+    </button>
+  </nav>
+
+  <!-- FAB -->
+  <button id="fab" onclick="openTxModal()" title="Új tranzakció">+</button>
+
+</div><!-- /app -->
+
+<!-- ══════════ TRANSACTION MODAL ══════════ -->
+<div id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal" id="tx-modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title" id="tx-modal-title">Új tranzakció</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+
+    <input type="hidden" id="tx-edit-id"/>
+
+    <div class="form-group">
+      <label>Típus</label>
+      <div class="type-toggle">
+        <button id="type-expense" class="active expense" onclick="setTxType('expense')">Kiadás</button>
+        <button id="type-income" onclick="setTxType('income')">Bevétel</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Összeg</label>
+      <input type="number" id="tx-amount" placeholder="0" min="0" step="0.01" required/>
+    </div>
+    <div class="form-group">
+      <label>Kategória</label>
+      <select id="tx-category"></select>
+    </div>
+    <div class="form-group">
+      <label>Dátum</label>
+      <input type="date" id="tx-date" required/>
+    </div>
+    <div class="form-group">
+      <label>Megjegyzés</label>
+      <input type="text" id="tx-note" placeholder="Opcionális"/>
+    </div>
+    <button class="btn btn-primary btn-full" onclick="saveTx()">💾 Mentés</button>
+  </div>
+</div>
+
+<!-- ══════════ CATEGORY MODAL ══════════ -->
+<div id="cat-modal-overlay" onclick="closeCatModal(event)">
+  <!-- reuse same overlay style trick -->
+</div>
+<div id="modal-overlay-cat" onclick="closeCatModal(event)" style="display:none;position:fixed;inset:0;background:#000a;z-index:500;align-items:flex-end;justify-content:center">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title" id="cat-modal-title">Új kategória</span>
+      <button class="modal-close" onclick="closeCatModal()">✕</button>
+    </div>
+    <input type="hidden" id="cat-edit-id"/>
+    <div class="form-group">
+      <label>Emoji ikon</label>
+      <input type="text" id="cat-icon" placeholder="🛍️" maxlength="2" style="font-size:24px;text-align:center"/>
+    </div>
+    <div class="form-group">
+      <label>Név</label>
+      <input type="text" id="cat-name" placeholder="pl. Élelmiszer"/>
+    </div>
+    <div class="form-group">
+      <label>Szín</label>
+      <input type="color" id="cat-color" value="#00C48C" style="height:44px;padding:4px;cursor:pointer"/>
+    </div>
+    <div class="form-group">
+      <label>Havi limit (opcionális, 0 = nincs)</label>
+      <input type="number" id="cat-limit" placeholder="0" min="0" step="1"/>
+    </div>
+    <button class="btn btn-primary btn-full" onclick="saveCat()">💾 Mentés</button>
+  </div>
+</div>
+
+<!-- ══════════ SAVINGS MODAL ══════════ -->
+<div id="modal-overlay-savings" onclick="closeSavingsModal(event)" style="display:none;position:fixed;inset:0;background:#000a;z-index:500;align-items:flex-end;justify-content:center">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">Megtakarítási cél</span>
+      <button class="modal-close" onclick="closeSavingsModal()">✕</button>
+    </div>
+    <div class="form-group">
+      <label>Cél neve</label>
+      <input type="text" id="sg-name" placeholder="pl. Nyaralás"/>
+    </div>
+    <div class="form-group">
+      <label>Célösszeg</label>
+      <input type="number" id="sg-target" placeholder="0" min="0"/>
+    </div>
+    <div class="form-group">
+      <label>Jelenlegi állás</label>
+      <input type="number" id="sg-current" placeholder="0" min="0"/>
+    </div>
+    <div class="form-group">
+      <label>Határidő (opcionális)</label>
+      <input type="date" id="sg-deadline"/>
+    </div>
+    <button class="btn btn-primary btn-full" onclick="saveSavingsGoal()">💾 Mentés</button>
+  </div>
+</div>
+
+<!-- ══════════ LIMIT TRANSFER MODAL ══════════ -->
+<div id="modal-overlay-limit" onclick="closeLimitModal(event)" style="display:none;position:fixed;inset:0;background:#000a;z-index:500;align-items:flex-end;justify-content:center">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">Limit átcsoportosítás</span>
+      <button class="modal-close" onclick="closeLimitModal()">✕</button>
+    </div>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px" id="limit-modal-desc"></p>
+    <div class="form-group">
+      <label>Levonás innen</label>
+      <select id="limit-from-cat"></select>
+    </div>
+    <div id="limit-avail-text" style="font-size:12px;color:var(--text-muted);margin:-8px 0 10px"></div>
+    <div id="limit-no-avail" style="display:none;color:var(--danger);font-size:13px;margin-bottom:12px">
+      ⚠️ Nincs elég maradék limit más kategóriában a levonáshoz.
+    </div>
+    <button class="btn btn-primary btn-full" id="limit-confirm-btn" onclick="confirmLimitTransfer()">✅ Megerősítés</button>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// DATABASE (Dexie/IndexedDB)
+// ═══════════════════════════════════════════════════════════════
+const db = new Dexie('BudgetManagerDB');
+db.version(1).stores({
+  transactions: '++id, date, categoryId, type, currency',
+  categories:   '++id, name',
+  savingsGoals: '++id',
+  settings:     'key'
+});
+
+// ─── Default categories ───────────────────────────────────────
+const DEFAULT_CATS = [
+  { name: 'Élelmiszer',    icon: '🛒', color: '#00C48C', monthlyLimit: null },
+  { name: 'Lakás',         icon: '🏠', color: '#4A9EFF', monthlyLimit: null },
+  { name: 'Szórakozás',    icon: '🎬', color: '#A855F7', monthlyLimit: null },
+  { name: 'Közlekedés',    icon: '🚌', color: '#F5A623', monthlyLimit: null },
+  { name: 'Egészség',      icon: '💊', color: '#E8384F', monthlyLimit: null },
+  { name: 'Ruházat',       icon: '👗', color: '#EC4899', monthlyLimit: null },
+  { name: 'Egyéb',         icon: '📦', color: '#8A93AA', monthlyLimit: null },
+];
+
+// ═══════════════════════════════════════════════════════════════
+// GLOBALS
+// ═══════════════════════════════════════════════════════════════
+let activeCurrency = 'HUF';
+let currentTxType  = 'expense';
+let currentOcrType = 'expense';
+let pieChartInst   = null;
+let deferredInstallPrompt = null;
+let pendingSW = null;
+let limitTransferCtx = null; // { overCatId, overAmount }
+
+// ═══════════════════════════════════════════════════════════════
+// CURRENCY FORMATTING
+// ═══════════════════════════════════════════════════════════════
+function fmt(amount, currency) {
+  const c = currency || activeCurrency;
+  if (c === 'HUF') {
+    // 1 234 567 Ft
+    const rounded = Math.round(amount);
+    return rounded.toLocaleString('hu-HU') + ' Ft';
+  } else if (c === 'EUR') {
+    // € 1.234,56
+    return '€ ' + amount.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  } else {
+    // $1,234.56
+    return '$' + amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SERVICE WORKER REGISTRATION
+// ═══════════════════════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./service-worker.js').then((reg) => {
+    // Listen for updates
+    reg.addEventListener('updatefound', () => {
+      const newWorker = reg.installing;
+      newWorker.addEventListener('statechange', () => {
+        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+          // New SW waiting — show update toast
+          pendingSW = newWorker;
+          document.getElementById('update-toast').classList.add('show');
+        }
+      });
+    });
+  });
+}
+
+function applyUpdate() {
+  if (pendingSW) {
+    pendingSW.postMessage({ type: 'SKIP_WAITING' });
+    window.location.reload();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PWA INSTALL PROMPT
+// ═══════════════════════════════════════════════════════════════
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  // Check if already standalone
+  if (!window.matchMedia('(display-mode: standalone)').matches) {
+    document.getElementById('pwa-banner').classList.add('show');
+  }
+});
+
+document.getElementById('pwa-install-btn').addEventListener('click', async () => {
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    const { outcome } = await deferredInstallPrompt.userChoice;
+    if (outcome === 'accepted') {
+      document.getElementById('pwa-banner').classList.remove('show');
+    }
+    deferredInstallPrompt = null;
+  }
+});
+
+// Standalone mode detection
+if (!window.matchMedia('(display-mode: standalone)').matches &&
+    !navigator.standalone) {
+  // Show install hint (will be replaced by beforeinstallprompt banner if supported)
+  // Safari doesn't fire beforeinstallprompt — show banner directly
+  const ua = navigator.userAgent;
+  if (/iphone|ipad|ipod/i.test(ua)) {
+    document.getElementById('pwa-banner').classList.add('show');
+    document.getElementById('pwa-banner').querySelector('button').textContent = 'Hogyan?';
+    document.getElementById('pwa-install-btn').onclick = () => {
+      alert('Safari-ban: nyomd a Megosztás gombot (□↑), majd „Főképernyőhöz adás"');
+    };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+async function init() {
+  // Check onboarding
+  const setting = await db.settings.get('currency');
+  if (!setting) {
+    document.getElementById('onboarding').classList.add('show');
+    return;
+  }
+  activeCurrency = setting.value;
+
+  // Seed categories if empty
+  const catCount = await db.categories.count();
+  if (catCount === 0) {
+    await db.categories.bulkAdd(DEFAULT_CATS);
+  }
+
+  await refreshAll();
+}
+
+async function finishOnboarding(currency) {
+  activeCurrency = currency;
+  await db.settings.put({ key: 'currency', value: currency });
+  document.getElementById('onboarding').classList.remove('show');
+
+  const catCount = await db.categories.count();
+  if (catCount === 0) {
+    await db.categories.bulkAdd(DEFAULT_CATS);
+  }
+  await refreshAll();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+
+  // Hide/show FAB (only on relevant pages)
+  const fab = document.getElementById('fab');
+  fab.style.display = ['dashboard','transactions'].includes(name) ? 'flex' : 'none';
+
+  if (name === 'dashboard')    renderDashboard();
+  if (name === 'transactions') renderTransactions();
+  if (name === 'categories')   renderCategories();
+  if (name === 'savings')      renderSavings();
+}
+
+async function refreshAll() {
+  await renderDashboard();
+  await renderTransactions();
+  await renderCategories();
+  await renderSavings();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DATE HELPERS
+// ═══════════════════════════════════════════════════════════════
+function todayISO() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function currentMonthBounds() {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const start = new Date(y, m, 1).toISOString().split('T')[0];
+  const end   = new Date(y, m + 1, 0).toISOString().split('T')[0];
+  return { start, end, daysInMonth: new Date(y, m + 1, 0).getDate(), dayOfMonth: now.getDate() };
+}
+
+function prevMonthBounds() {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const pm = m === 0 ? 11 : m - 1;
+  const py = m === 0 ? y - 1 : y;
+  const start = new Date(py, pm, 1).toISOString().split('T')[0];
+  const end   = new Date(py, pm + 1, 0).toISOString().split('T')[0];
+  return { start, end };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════════════════════════
+async function renderDashboard() {
+  const { start, end, daysInMonth, dayOfMonth } = currentMonthBounds();
+
+  const txAll = await db.transactions
+    .where('date').between(start, end, true, true).toArray();
+
+  const income  = txAll.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+  const expense = txAll.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+  const balance = income - expense;
+
+  document.getElementById('dash-balance').textContent = fmt(balance);
+  document.getElementById('dash-balance').style.color = balance >= 0 ? 'var(--primary)' : 'var(--danger)';
+  document.getElementById('dash-income').textContent  = fmt(income);
+  document.getElementById('dash-expense').textContent = fmt(expense);
+
+  // ── Gauge arc: expense / total limits ──
+  const cats = await db.categories.toArray();
+  const totalLimit = cats.reduce((s, c) => s + (c.monthlyLimit || 0), 0);
+  let gaugePct = totalLimit > 0 ? Math.min(expense / totalLimit, 1) : 0;
+
+  // arc path circumference ≈ 283 (semi-circle r=90)
+  const circ = 283;
+  const offset = circ - (gaugePct * circ);
+  const fill = document.getElementById('gauge-fill');
+  fill.setAttribute('stroke-dashoffset', offset.toFixed(1));
+  fill.setAttribute('stroke', gaugePct > .9 ? '#E8384F' : gaugePct > .7 ? '#F5A623' : '#00C48C');
+  document.getElementById('gauge-pct').textContent = Math.round(gaugePct * 100) + '%';
+
+  // ── Pie chart ──
+  const expenseTxs = txAll.filter(t => t.type === 'expense');
+  const byCategory = {};
+  for (const tx of expenseTxs) {
+    byCategory[tx.categoryId] = (byCategory[tx.categoryId] || 0) + tx.amount;
+  }
+
+  const chartWrap = document.getElementById('chart-wrap');
+  const chartEmpty = document.getElementById('chart-empty');
+
+  if (Object.keys(byCategory).length === 0) {
+    chartWrap.style.display = 'none';
+    chartEmpty.style.display = 'block';
+    if (pieChartInst) { pieChartInst.destroy(); pieChartInst = null; }
+  } else {
+    chartWrap.style.display = 'block';
+    chartEmpty.style.display = 'none';
+
+    const catMap = Object.fromEntries(cats.map(c => [c.id, c]));
+    const labels = [], data = [], colors = [];
+    for (const [cid, amt] of Object.entries(byCategory)) {
+      const c = catMap[cid] || { name: 'Ismeretlen', color: '#555', icon: '❓' };
+      labels.push(c.icon + ' ' + c.name);
+      data.push(amt);
+      colors.push(c.color);
+    }
+
+    const ctx = document.getElementById('pie-chart').getContext('2d');
+    if (pieChartInst) pieChartInst.destroy();
+    pieChartInst = new Chart(ctx, {
+      type: 'doughnut',
+      data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: '#1A2540' }] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { color: '#F0EDE6', font: { size: 11 }, boxWidth: 12, padding: 10 }
+          },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => ' ' + fmt(ctx.raw)
+            }
+          }
+        },
+        cutout: '60%',
+      }
+    });
+  }
+
+  // ── Prediction ──
+  await renderPrediction(txAll, expense, daysInMonth, dayOfMonth, cats);
+
+  // ── Limit warnings ──
+  await renderLimitWarnings(txAll, cats);
+}
+
+async function renderPrediction(txAll, expense, daysInMonth, dayOfMonth, cats) {
+  const box = document.getElementById('prediction-box');
+  const expenseTxs = txAll.filter(t => t.type === 'expense');
+
+  if (expenseTxs.length < 3) {
+    box.textContent = '📈 Még nincs elég adat a predikcióhoz (minimum 3 tranzakció szükséges).';
+    return;
+  }
+
+  const dailyRate = expense / dayOfMonth;
+  const projected = dailyRate * daysInMonth;
+
+  // Previous month comparison
+  const { start: ps, end: pe } = prevMonthBounds();
+  const prevTxs = await db.transactions.where('date').between(ps, pe, true, true).toArray();
+  const prevExpense = prevTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+
+  // Find which category will exceed limit
+  const byCategory = {};
+  for (const tx of expenseTxs) {
+    byCategory[tx.categoryId] = (byCategory[tx.categoryId] || 0) + tx.amount;
+  }
+
+  let worstCat = null, worstOverflow = 0;
+  for (const cat of cats) {
+    if (!cat.monthlyLimit) continue;
+    const spent = byCategory[cat.id] || 0;
+    const projectedCat = (spent / dayOfMonth) * daysInMonth;
+    const over = projectedCat - cat.monthlyLimit;
+    if (over > worstOverflow) { worstOverflow = over; worstCat = cat; }
+  }
+
+  let html = `📊 Jelenlegi kiadási ütem: <strong>${fmt(projected)}</strong> várható hónap végéig.`;
+  if (prevExpense > 0) {
+    const diff = projected - prevExpense;
+    const sign = diff >= 0 ? '+' : '';
+    html += `<br>Előző hónaphoz képest: <strong>${sign}${fmt(Math.abs(diff))}</strong> ${diff >= 0 ? '📈' : '📉'}`;
+  }
+  if (worstCat) {
+    html += `<br>⚠️ Ha így folytatod, hónap végéig kb. <strong>${fmt(worstOverflow)}</strong>-tal léped túl a <strong>${worstCat.icon} ${worstCat.name}</strong> limitet.`;
+  }
+
+  box.innerHTML = html;
+}
+
+async function renderLimitWarnings(txAll, cats) {
+  const container = document.getElementById('limit-warnings');
+  const expenseTxs = txAll.filter(t => t.type === 'expense');
+  const byCategory = {};
+  for (const tx of expenseTxs) {
+    byCategory[tx.categoryId] = (byCategory[tx.categoryId] || 0) + tx.amount;
+  }
+
+  let html = '';
+  for (const cat of cats) {
+    if (!cat.monthlyLimit) continue;
+    const spent = byCategory[cat.id] || 0;
+    if (spent > cat.monthlyLimit) {
+      const over = spent - cat.monthlyLimit;
+      html += `
+        <div class="card" style="border-color:var(--danger)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span style="font-size:20px">${cat.icon}</span>
+            <div>
+              <div style="font-size:14px;font-weight:700">${cat.name} <span class="badge badge-danger">Limit túllépve</span></div>
+              <div style="font-size:12px;color:var(--text-muted)">Túllépés: ${fmt(over)}</div>
+            </div>
+          </div>
+          <button class="btn btn-sm btn-ghost" onclick="openLimitModal(${cat.id}, ${over})">
+            ↔️ Átcsoportosítás más kategóriából
+          </button>
+        </div>`;
+    }
+  }
+  container.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TRANSACTIONS
+// ═══════════════════════════════════════════════════════════════
+async function renderTransactions() {
+  const container = document.getElementById('tx-list');
+  const txs = await db.transactions.orderBy('date').reverse().toArray();
+  const cats = await db.categories.toArray();
+  const catMap = Object.fromEntries(cats.map(c => [c.id, c]));
+
+  if (txs.length === 0) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">📋</div><p>Nincs tranzakció még.<br>Nyomd a + gombot az első hozzáadásához.</p></div>`;
+    return;
+  }
+
+  container.innerHTML = txs.map(tx => {
+    const cat = catMap[tx.categoryId] || { name: 'Ismeretlen', icon: '❓', color: '#555' };
+    const isIncome = tx.type === 'income';
+    const sign = isIncome ? '+' : '−';
+    return `
+      <div class="tx-item">
+        <div class="tx-icon" style="background:${cat.color}22;color:${cat.color}">${cat.icon}</div>
+        <div class="tx-meta">
+          <div class="tx-cat">${cat.name}</div>
+          <div class="tx-note">${tx.note || '—'}</div>
+          <div class="tx-date">${tx.date}</div>
+        </div>
+        <div class="tx-amount ${isIncome ? 'income' : 'expense'} num">
+          ${sign}${fmt(tx.amount)}
+        </div>
+        <div class="tx-actions">
+          <button onclick="editTx(${tx.id})" title="Szerkesztés">✏️</button>
+          <button onclick="deleteTx(${tx.id})" title="Törlés">🗑️</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function openTxModal(prefill) {
+  document.getElementById('tx-modal-title').textContent = 'Új tranzakció';
+  document.getElementById('tx-edit-id').value = '';
+  document.getElementById('tx-amount').value = prefill?.amount || '';
+  document.getElementById('tx-note').value   = prefill?.note   || '';
+  document.getElementById('tx-date').value   = prefill?.date   || todayISO();
+  setTxType(prefill?.type || 'expense');
+  populateCategorySelect('tx-category', prefill?.categoryId);
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modal-overlay')) return;
+  document.getElementById('modal-overlay').classList.remove('show');
+}
+
+function setTxType(type) {
+  currentTxType = type;
+  document.getElementById('type-expense').className = type === 'expense' ? 'active expense' : '';
+  document.getElementById('type-income').className  = type === 'income'  ? 'active income'  : '';
+}
+
+async function populateCategorySelect(selectId, selectedId) {
+  const cats = await db.categories.toArray();
+  const sel  = document.getElementById(selectId);
+  sel.innerHTML = cats.map(c =>
+    `<option value="${c.id}" ${c.id === selectedId ? 'selected' : ''}>${c.icon} ${c.name}</option>`
+  ).join('');
+}
+
+async function saveTx() {
+  const id     = document.getElementById('tx-edit-id').value;
+  const amount = parseFloat(document.getElementById('tx-amount').value);
+  const catId  = parseInt(document.getElementById('tx-category').value);
+  const date   = document.getElementById('tx-date').value;
+  const note   = document.getElementById('tx-note').value.trim();
+
+  if (!amount || amount <= 0 || !date) {
+    alert('Kérlek add meg az összeget és a dátumot!');
+    return;
+  }
+
+  const record = { amount, categoryId: catId, date, note, type: currentTxType, source: 'manual', currency: activeCurrency };
+
+  if (id) {
+    await db.transactions.update(parseInt(id), record);
+  } else {
+    await db.transactions.add(record);
+  }
+
+  document.getElementById('modal-overlay').classList.remove('show');
+  await refreshAll();
+}
+
+async function editTx(id) {
+  const tx = await db.transactions.get(id);
+  if (!tx) return;
+  document.getElementById('tx-modal-title').textContent = 'Tranzakció szerkesztése';
+  document.getElementById('tx-edit-id').value  = id;
+  document.getElementById('tx-amount').value   = tx.amount;
+  document.getElementById('tx-note').value     = tx.note || '';
+  document.getElementById('tx-date').value     = tx.date;
+  setTxType(tx.type || 'expense');
+  await populateCategorySelect('tx-category', tx.categoryId);
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+async function deleteTx(id) {
+  if (!confirm('Törlöd ezt a tranzakciót?')) return;
+  await db.transactions.delete(id);
+  await refreshAll();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CATEGORIES
+// ═══════════════════════════════════════════════════════════════
+async function renderCategories() {
+  const container = document.getElementById('cat-list');
+  const cats = await db.categories.toArray();
+
+  if (cats.length === 0) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">🏷️</div><p>Még nincs kategória.</p></div>`;
+    return;
+  }
+
+  // Get current month spending per category
+  const { start, end } = currentMonthBounds();
+  const txs = await db.transactions.where('date').between(start, end, true, true).toArray();
+  const spent = {};
+  for (const tx of txs.filter(t => t.type === 'expense')) {
+    spent[tx.categoryId] = (spent[tx.categoryId] || 0) + tx.amount;
+  }
+
+  container.innerHTML = cats.map(cat => {
+    const s = spent[cat.id] || 0;
+    const hasLimit = cat.monthlyLimit > 0;
+    const pct = hasLimit ? Math.min(s / cat.monthlyLimit * 100, 100) : 0;
+    const barClass = pct >= 100 ? 'over' : pct >= 80 ? 'warn' : '';
+    const overBadge = hasLimit && s > cat.monthlyLimit
+      ? `<span class="badge badge-danger">Túllépve</span>`
+      : hasLimit && pct >= 80
+        ? `<span class="badge badge-warning">Közel</span>`
+        : '';
+
+    return `
+      <div class="cat-row">
+        <div class="cat-icon-circle" style="background:${cat.color}22;color:${cat.color}">${cat.icon}</div>
+        <div class="cat-info">
+          <div class="cat-name">${cat.name} ${overBadge}</div>
+          <div class="cat-limit">
+            ${hasLimit
+              ? `${fmt(s)} / ${fmt(cat.monthlyLimit)}`
+              : fmt(s) + ' (nincs limit)'}
+          </div>
+          ${hasLimit ? `
+            <div class="progress-wrap">
+              <div class="progress-bar ${barClass}" style="width:${pct}%"></div>
+            </div>` : ''}
+        </div>
+        <div class="cat-actions">
+          <button onclick="openCatModal(${cat.id})" title="Szerkesztés">✏️</button>
+          <button onclick="deleteCat(${cat.id})" title="Törlés">🗑️</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function openCatModal(id) {
+  document.getElementById('cat-edit-id').value = id || '';
+  if (id) {
+    const cat = await db.categories.get(id);
+    document.getElementById('cat-modal-title').textContent = 'Kategória szerkesztése';
+    document.getElementById('cat-icon').value  = cat.icon  || '📦';
+    document.getElementById('cat-name').value  = cat.name;
+    document.getElementById('cat-color').value = cat.color || '#00C48C';
+    document.getElementById('cat-limit').value = cat.monthlyLimit || '';
+  } else {
+    document.getElementById('cat-modal-title').textContent = 'Új kategória';
+    document.getElementById('cat-icon').value  = '📦';
+    document.getElementById('cat-name').value  = '';
+    document.getElementById('cat-color').value = '#00C48C';
+    document.getElementById('cat-limit').value = '';
+  }
+  const ov = document.getElementById('modal-overlay-cat');
+  ov.style.display = 'flex';
+}
+
+function closeCatModal(e) {
+  const ov = document.getElementById('modal-overlay-cat');
+  if (e && e.target !== ov) return;
+  ov.style.display = 'none';
+}
+
+async function saveCat() {
+  const id    = document.getElementById('cat-edit-id').value;
+  const icon  = document.getElementById('cat-icon').value.trim() || '📦';
+  const name  = document.getElementById('cat-name').value.trim();
+  const color = document.getElementById('cat-color').value;
+  const limit = parseFloat(document.getElementById('cat-limit').value) || null;
+
+  if (!name) { alert('Add meg a kategória nevét!'); return; }
+
+  const record = { name, icon, color, monthlyLimit: limit };
+  if (id) {
+    await db.categories.update(parseInt(id), record);
+  } else {
+    await db.categories.add(record);
+  }
+
+  document.getElementById('modal-overlay-cat').style.display = 'none';
+  await refreshAll();
+}
+
+async function deleteCat(id) {
+  if (!confirm('Törlöd ezt a kategóriát? A hozzá tartozó tranzakciók megmaradnak.')) return;
+  await db.categories.delete(id);
+  await refreshAll();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SAVINGS GOALS
+// ═══════════════════════════════════════════════════════════════
+async function renderSavings() {
+  const container = document.getElementById('savings-content');
+  const goals = await db.savingsGoals.toArray();
+
+  if (goals.length === 0) {
+    container.innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">🎯</div>
+        <p>Még nincs megtakarítási célod.</p>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="openSavingsModal()">+ Cél létrehozása</button>`;
+    return;
+  }
+
+  const goal = goals[0]; // One active goal
+  const pct = goal.targetAmount > 0 ? Math.min(goal.currentAmount / goal.targetAmount * 100, 100) : 0;
+  const remaining = Math.max(goal.targetAmount - goal.currentAmount, 0);
+  const barClass = pct >= 100 ? 'over' : '';
+
+  let deadlineText = '';
+  if (goal.deadline) {
+    const d = new Date(goal.deadline);
+    const now = new Date();
+    const daysLeft = Math.ceil((d - now) / 86400000);
+    deadlineText = `Határidő: ${goal.deadline} (${daysLeft > 0 ? daysLeft + ' nap van hátra' : 'Lejárt!'})`;
+  }
+
+  container.innerHTML = `
+    <div class="card">
+      <div class="savings-header">
+        <div>
+          <div class="savings-target-label">${goal.name}</div>
+          <div class="savings-amounts">
+            <span class="savings-current num">${fmt(goal.currentAmount)}</span>
+            <span class="savings-target">/ ${fmt(goal.targetAmount)}</span>
+          </div>
+        </div>
+        <span class="savings-pct">${Math.round(pct)}%</span>
+      </div>
+      <div class="progress-wrap" style="height:12px">
+        <div class="progress-bar ${barClass}" style="width:${pct}%"></div>
+      </div>
+      ${deadlineText ? `<div class="savings-deadline">📅 ${deadlineText}</div>` : ''}
+      ${remaining > 0 ? `<div style="font-size:12px;color:var(--text-muted);margin-top:6px">Még szükséges: ${fmt(remaining)}</div>` : '<div style="color:var(--primary);font-weight:700;margin-top:6px">🎉 Cél elérve!</div>'}
+    </div>
+
+    <div class="form-group" style="margin-top:8px">
+      <label>Hozzáadás összege</label>
+      <input type="number" id="savings-add-amount" placeholder="0" min="0" step="0.01"/>
+    </div>
+    <button class="btn btn-primary btn-full" onclick="addToSavings(${goal.id})">💰 Hozzáadás</button>
+    <button class="btn btn-ghost btn-full" style="margin-top:8px" onclick="openSavingsModal(${goal.id})">✏️ Szerkesztés</button>
+    <button class="btn btn-ghost btn-full" style="margin-top:8px" onclick="deleteSavingsGoal(${goal.id})">🗑️ Cél törlése</button>`;
+}
+
+async function addToSavings(goalId) {
+  const amount = parseFloat(document.getElementById('savings-add-amount').value);
+  if (!amount || amount <= 0) { alert('Add meg az összeget!'); return; }
+
+  const goal = await db.savingsGoals.get(goalId);
+  const newAmount = goal.currentAmount + amount;
+  await db.savingsGoals.update(goalId, { currentAmount: newAmount });
+
+  // Record as transaction
+  let catId = null;
+  const cats = await db.categories.toArray();
+  const savCat = cats.find(c => c.name === 'Megtakarítás');
+  if (savCat) {
+    catId = savCat.id;
+  } else {
+    catId = await db.categories.add({ name: 'Megtakarítás', icon: '🎯', color: '#4A9EFF', monthlyLimit: null });
+  }
+
+  await db.transactions.add({
+    amount, categoryId: catId, date: todayISO(),
+    note: `Megtakarítás: ${goal.name}`, type: 'expense', source: 'manual', currency: activeCurrency
+  });
+
+  await refreshAll();
+}
+
+async function openSavingsModal(id) {
+  if (id) {
+    const g = await db.savingsGoals.get(id);
+    document.getElementById('sg-name').value     = g.name;
+    document.getElementById('sg-target').value   = g.targetAmount;
+    document.getElementById('sg-current').value  = g.currentAmount;
+    document.getElementById('sg-deadline').value = g.deadline || '';
+    document.getElementById('sg-name').dataset.editId = id;
+  } else {
+    document.getElementById('sg-name').value     = '';
+    document.getElementById('sg-target').value   = '';
+    document.getElementById('sg-current').value  = '0';
+    document.getElementById('sg-deadline').value = '';
+    document.getElementById('sg-name').dataset.editId = '';
+  }
+  document.getElementById('modal-overlay-savings').style.display = 'flex';
+}
+
+function closeSavingsModal(e) {
+  const ov = document.getElementById('modal-overlay-savings');
+  if (e && e.target !== ov) return;
+  ov.style.display = 'none';
+}
+
+async function saveSavingsGoal() {
+  const name    = document.getElementById('sg-name').value.trim();
+  const target  = parseFloat(document.getElementById('sg-target').value) || 0;
+  const current = parseFloat(document.getElementById('sg-current').value) || 0;
+  const deadline = document.getElementById('sg-deadline').value || null;
+  const editId  = document.getElementById('sg-name').dataset.editId;
+
+  if (!name || target <= 0) { alert('Add meg a cél nevét és összegét!'); return; }
+
+  const record = { name, targetAmount: target, currentAmount: current, deadline, linkedCategoryIds: [] };
+
+  if (editId) {
+    await db.savingsGoals.update(parseInt(editId), record);
+  } else {
+    // Only one active goal — clear old ones
+    await db.savingsGoals.clear();
+    await db.savingsGoals.add(record);
+  }
+
+  document.getElementById('modal-overlay-savings').style.display = 'none';
+  await renderSavings();
+}
+
+async function deleteSavingsGoal(id) {
+  if (!confirm('Törlöd ezt a megtakarítási célt?')) return;
+  await db.savingsGoals.delete(id);
+  await renderSavings();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LIMIT TRANSFER
+// ═══════════════════════════════════════════════════════════════
+async function openLimitModal(overCatId, overAmount) {
+  limitTransferCtx = { overCatId, overAmount };
+
+  const cats = await db.categories.toArray();
+  const overCat = cats.find(c => c.id === overCatId);
+
+  document.getElementById('limit-modal-desc').textContent =
+    `A(z) "${overCat.icon} ${overCat.name}" kategória ${fmt(overAmount)}-val lépte túl a limitet. Vond le ezt egy másik kategória maradék limitjéből.`;
+
+  // Get current month spending
+  const { start, end } = currentMonthBounds();
+  const txs = await db.transactions.where('date').between(start, end, true, true).toArray();
+  const spent = {};
+  for (const tx of txs.filter(t => t.type === 'expense')) {
+    spent[tx.categoryId] = (spent[tx.categoryId] || 0) + tx.amount;
+  }
+
+  // Cats with remaining budget (excluding the over-budget cat)
+  const available = cats.filter(c =>
+    c.id !== overCatId &&
+    c.monthlyLimit > 0 &&
+    (c.monthlyLimit - (spent[c.id] || 0)) >= overAmount
+  );
+
+  const sel = document.getElementById('limit-from-cat');
+  const noAvail = document.getElementById('limit-no-avail');
+  const confirmBtn = document.getElementById('limit-confirm-btn');
+
+  if (available.length === 0) {
+    sel.style.display = 'none';
+    noAvail.style.display = 'block';
+    confirmBtn.disabled = true;
+  } else {
+    sel.style.display = 'block';
+    noAvail.style.display = 'none';
+    confirmBtn.disabled = false;
+    sel.innerHTML = available.map(c => {
+      const remaining = c.monthlyLimit - (spent[c.id] || 0);
+      return `<option value="${c.id}">${c.icon} ${c.name} (szabad: ${fmt(remaining)})</option>`;
+    }).join('');
+  }
+
+  document.getElementById('modal-overlay-limit').style.display = 'flex';
+}
+
+function closeLimitModal(e) {
+  const ov = document.getElementById('modal-overlay-limit');
+  if (e && e.target !== ov) return;
+  ov.style.display = 'none';
+}
+
+async function confirmLimitTransfer() {
+  if (!limitTransferCtx) return;
+  const fromCatId = parseInt(document.getElementById('limit-from-cat').value);
+  const fromCat   = await db.categories.get(fromCatId);
+  const overCat   = await db.categories.get(limitTransferCtx.overCatId);
+
+  // Reduce fromCat's limit
+  const newLimit = fromCat.monthlyLimit - limitTransferCtx.overAmount;
+  await db.categories.update(fromCatId, { monthlyLimit: Math.max(newLimit, 0) });
+
+  // Increase overCat's limit
+  const newOverLimit = (overCat.monthlyLimit || 0) + limitTransferCtx.overAmount;
+  await db.categories.update(limitTransferCtx.overCatId, { monthlyLimit: newOverLimit });
+
+  document.getElementById('modal-overlay-limit').style.display = 'none';
+  limitTransferCtx = null;
+  await refreshAll();
+  alert('✅ Limit sikeresen átcsoportosítva.');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// OCR
+// ═══════════════════════════════════════════════════════════════
+function handleOcrDrop(e) {
+  e.preventDefault();
+  document.getElementById('ocr-drop-zone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) startOcr(file);
+}
+
+async function startOcr(file) {
+  if (!file) return;
+
+  document.getElementById('ocr-drop-zone').style.display = 'none';
+  document.getElementById('ocr-result-form').style.display = 'none';
+
+  const progressWrap = document.getElementById('ocr-progress-wrap');
+  const statusText   = document.getElementById('ocr-status-text');
+  const progressBar  = document.getElementById('ocr-progress-bar-inner');
+  progressWrap.style.display = 'flex';
+
+  try {
+    const result = await Tesseract.recognize(file, 'hun+eng', {
+      logger: (m) => {
+        if (m.status === 'recognizing text') {
+          progressBar.style.width = Math.round(m.progress * 100) + '%';
+          statusText.textContent = 'Szöveg felismerése: ' + Math.round(m.progress * 100) + '%';
+        }
+      }
+    });
+
+    progressWrap.style.display = 'none';
+    const text = result.data.text;
+    parseOcrResult(text);
+
+  } catch (err) {
+    progressWrap.style.display = 'none';
+    document.getElementById('ocr-drop-zone').style.display = 'block';
+    alert('OCR hiba: ' + err.message);
+  }
+}
+
+function parseOcrResult(rawText) {
+  // Extract amounts
+  let amount = null;
+
+  // HUF: digits with spaces followed by Ft or HUF
+  const hufMatch = rawText.match(/(\d[\d\s]*)\s?(Ft|HUF)/i);
+  if (hufMatch) {
+    amount = parseFloat(hufMatch[1].replace(/\s/g, ''));
+  }
+
+  // EUR: € + digits
+  if (!amount) {
+    const eurMatch = rawText.match(/€\s?(\d+[.,]\d{2})/);
+    if (eurMatch) amount = parseFloat(eurMatch[1].replace(',', '.'));
+  }
+
+  // USD: $ + digits
+  if (!amount) {
+    const usdMatch = rawText.match(/\$\s?(\d+[.,]\d{2})/);
+    if (usdMatch) amount = parseFloat(usdMatch[1].replace(',', '.'));
+  }
+
+  // Extract date
+  let date = null;
+  const dateMatch1 = rawText.match(/(\d{4})[-./](\d{2})[-./](\d{2})/);
+  const dateMatch2 = rawText.match(/(\d{2})[-./](\d{2})[-./](\d{4})/);
+  if (dateMatch1) {
+    date = `${dateMatch1[1]}-${dateMatch1[2]}-${dateMatch1[3]}`;
+  } else if (dateMatch2) {
+    date = `${dateMatch2[3]}-${dateMatch2[2]}-${dateMatch2[1]}`;
+  }
+
+  // Populate form
+  document.getElementById('ocr-raw-text').textContent = rawText.trim().substring(0, 400);
+  document.getElementById('ocr-amount').value = amount || '';
+  document.getElementById('ocr-date').value   = date || todayISO();
+  setOcrType('expense');
+  populateCategorySelect('ocr-category');
+
+  if (!amount) {
+    document.getElementById('ocr-raw-text').insertAdjacentHTML('afterend',
+      `<p style="color:var(--warning);font-size:12px;margin-bottom:10px">⚠️ Nem sikerült automatikusan felismerni az összeget, kérlek töltsd ki manuálisan.</p>`);
+  }
+
+  document.getElementById('ocr-result-form').style.display = 'block';
+}
+
+function setOcrType(type) {
+  currentOcrType = type;
+  document.getElementById('ocr-type-expense').className = type === 'expense' ? 'active expense' : '';
+  document.getElementById('ocr-type-income').className  = type === 'income'  ? 'active income'  : '';
+}
+
+async function saveOcrTx() {
+  const amount = parseFloat(document.getElementById('ocr-amount').value);
+  const catId  = parseInt(document.getElementById('ocr-category').value);
+  const date   = document.getElementById('ocr-date').value;
+  const note   = document.getElementById('ocr-note').value.trim();
+
+  if (!amount || amount <= 0 || !date) {
+    alert('Kérlek add meg az összeget és a dátumot!');
+    return;
+  }
+
+  await db.transactions.add({
+    amount, categoryId: catId, date, note,
+    type: currentOcrType, source: 'ocr', currency: activeCurrency
+  });
+
+  resetOcr();
+  await refreshAll();
+  switchTab('transactions');
+}
+
+function resetOcr() {
+  document.getElementById('ocr-drop-zone').style.display = 'block';
+  document.getElementById('ocr-result-form').style.display = 'none';
+  document.getElementById('ocr-file-input').value = '';
+  // Remove any warning messages
+  const warn = document.querySelector('#ocr-result-form p[style*="warning"]');
+  if (warn) warn.remove();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════════════
+init();
+</script>
+</body>
+</html>
