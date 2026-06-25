@@ -1,9 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" rx="96" fill="#0F1729"/>
-  <circle cx="256" cy="256" r="156" fill="none" stroke="#1E2D4A" stroke-width="28"/>
-  <circle cx="256" cy="256" r="156" fill="none" stroke="#00C48C" stroke-width="28"
-    stroke-dasharray="587 392" stroke-dashoffset="196" stroke-linecap="round"
-    transform="rotate(-90 256 256)"/>
-  <text x="256" y="288" text-anchor="middle" font-family="system-ui,sans-serif"
-    font-weight="700" font-size="120" fill="#F0EDE6">₿</text>
+  <!-- Rounded square background -->
+  <rect width="512" height="512" rx="116" fill="#4f46e5"/>
+  <!-- Wallet body -->
+  <rect x="80" y="176" width="352" height="224" rx="36" fill="white" opacity="0.95"/>
+  <!-- Wallet top flap -->
+  <rect x="80" y="138" width="352" height="86" rx="32" fill="white"/>
+  <!-- Coin pocket -->
+  <rect x="292" y="234" width="108" height="108" rx="54" fill="#4f46e5" opacity="0.15"/>
+  <circle cx="346" cy="288" r="38" fill="#4f46e5" opacity="0.25"/>
+  <circle cx="346" cy="288" r="22" fill="#4f46e5" opacity="0.6"/>
+  <!-- Card lines -->
+  <rect x="116" y="266" width="128" height="14" rx="7" fill="#4f46e5" opacity="0.3"/>
+  <rect x="116" y="304" width="86" height="14" rx="7" fill="#4f46e5" opacity="0.2"/>
 </svg>
