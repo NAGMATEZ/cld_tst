@@ -1,15 +1,17 @@
 # Budget Manager PWA
 
-Offline-first személyes költségvetés-kezelő — ingyenes, szerver nélküli, telefonra telepíthető.
+Offline-first személyes költségvetés-kezelő — szerver, regisztráció és internet-kapcsolat nélkül.
 
-## Fájlszerkezet
+---
+
+## Fájlstruktúra
 
 ```
-index.html          — Teljes alkalmazás (HTML + CSS + JS)
+index.html          — Teljes app (HTML + CSS + JS)
 manifest.json       — PWA manifest
 service-worker.js   — Cache-first service worker
-icon-192.svg        — App ikon (192px)
-icon-512.svg        — App ikon (512px)
+icon-192.svg        — App ikon (192×192)
+icon-512.svg        — App ikon (512×512)
 README.md           — Ez a fájl
 ```
 
@@ -17,87 +19,67 @@ README.md           — Ez a fájl
 
 ## Lokális tesztelés
 
-A service worker **nem működik** `file://` protokollról — HTTP szerver szükséges.
+A service worker `file://` protokollról **nem működik** — mindig HTTP szerveren futtasd.
 
-### Python (ajánlott)
 ```bash
-cd budget-pwa/
+# Python 3 (ajánlott)
 python -m http.server 8080
-# Megnyitás: http://localhost:8080
+
+# Majd nyisd meg böngészőben:
+# http://localhost:8080
 ```
 
-### Node.js (npx, telepítés nélkül)
+Alternatíva Node.js-sel:
 ```bash
 npx serve .
 ```
-
-### VS Code Live Server
-Telepítsd a „Live Server" extension-t, jobb klikk az `index.html`-en → „Open with Live Server".
-
-> **Fontos:** Chrome DevTools → Application → Service Workers → ✅ „Update on reload" jelöld be fejlesztés közben, hogy az SW mindig frissüljön.
 
 ---
 
 ## PWA telepítés mobilon
 
 ### Android — Chrome
-1. Nyisd meg az appot Chrome-ban (`http://localhost:8080` vagy a szervered URL-je)
-2. A böngésző alul mutat egy **„Telepítés"** bannert — nyomd meg
-3. Ha nem jelenik meg: menü (⋮) → **„Hozzáadás a főképernyőhöz"**
-4. Az app ikonja megjelenik a főképernyőn; megnyitva standalone módban fut (böngésző chrome nélkül)
 
-### iPhone / iPad — Safari
-1. Nyisd meg az appot **Safari**-ban (Chrome iOS nem támogatja a PWA telepítést)
-2. Érintsd meg a **Megosztás** gombot (négyzet felfelé mutató nyíllal, képernyő alján)
-3. Görgess le → **„Főképernyőhöz adás"** (Add to Home Screen)
-4. Adj nevet, majd nyomd a **Hozzáadás** gombot
-5. Az ikon megjelenik a főképernyőn — az app standalone módban nyílik meg
+1. Nyisd meg az appot Chrome-ban
+2. Vár, amíg megjelenik a telepítési banner (általában 30 másodpercen belül), **vagy**
+3. Nyomd a Chrome menüt (⋮) → **„Hozzáadás a kezdőképernyőhöz"**
+4. Erősítsd meg a nevet → **Hozzáadás**
+5. Az app ikonja megjelenik a kezdőképernyőn — ettől kezdve teljesen offline is működik
 
-> **Megjegyzés iOS-en:** A service worker és az offline cache iOS 11.3+ óta támogatott. A `beforeinstallprompt` esemény Safariban nem tüzel — az app ezért a fejlécben mutat telepítési útmutatót.
+### iOS — Safari
 
----
+1. Nyisd meg az appot **Safari**-ban (Chrome iOS-en nem támogatja a PWA telepítést)
+2. Nyomd a **Megosztás** ikont (⬆️ ikon az alsó sávban)
+3. Görgess le és válaszd: **„Főképernyőre adás"**
+4. Adj nevet az appnak → **Hozzáadás**
+5. Az app ikonja megjelenik a kezdőképernyőn
 
-## OCR — Bizonylat felismerés
-
-### Ajánlott képformátum
-- **Formátum:** JPG vagy PNG
-- **Minimális felbontás:** 300 DPI (kb. 1200×800 px egy A5-ös bizonylathoz)
-- **Megvilágítás:** egyenletes, árnyékmentes
-- **Szín:** színes vagy szürkeárnyalatos egyaránt működik
-
-### Hogyan működik
-Az app a **Tesseract.js** könyvtárral on-device OCR-t futtat — semmilyen adat nem kerül szerverre.
-
-1. Navigálj az **OCR** fülre
-2. Koppints a feltöltési területre vagy húzd rá a képet
-3. Várd meg a felismerést (néhány másodperc)
-4. Az előtöltött form-ban ellenőrizd az összeget és a dátumot, javítsd ha szükséges
-5. Mentés gombbal rögzítsd a tranzakciót
-
-### Felismert minták
-| Pénznem | Minta példa |
-|---------|-------------|
-| HUF     | `12 500 Ft`, `12500 HUF` |
-| EUR     | `€ 12,50`, `€12.50` |
-| USD     | `$12.50`, `$ 12,50` |
-| Dátum   | `2024-03-15`, `15.03.2024`, `15/03/2024` |
-
-Ha a felismerés sikertelen, az app megjeleníti a nyers szöveget és manuális kitöltést kér.
+> **Megjegyzés iOS-re:** Az iOS Safari a service worker cache-t támogatja, de a `beforeinstallprompt` eseményt nem — ezért az automatikus telepítési banner helyett manuális lépések szükségesek.
 
 ---
 
-## Adattárolás
+## OCR tesztelés
 
-Minden adat az eszköz **IndexedDB** adatbázisában tárolódik. Szinkronizálás, regisztráció és internet-kapcsolat nem szükséges.
+Az OCR funkció (📷 Bizonylat beolvasás) a Tesseract.js könyvtárat használja, amely teljes egészében az eszközön fut — nincs adatfeltöltés.
 
-### Adatbázis törlése (reset)
-Chrome DevTools → Application → Storage → Clear site data
+**Ajánlott képformátum:**
+- JPG vagy PNG
+- Minimális felbontás: **800 × 600 px** (kisebb képen a felismerés pontatlan lehet)
+- Jó kontrasztú, nem elhomályosított fotó
+
+**Felismerési minták:**
+- HUF: `1 234 Ft`, `1234 HUF`
+- EUR: `€ 12,34`, `12.34€`
+- USD: `$12.34`
+- Dátum: `2024-03-15`, `15.03.2024`, `2024/03/15`
+
+Az OCR eredmény mindig szerkeszthető előtöltött formban jelenik meg — az app soha nem ment automatikusan megerősítés nélkül.
 
 ---
 
-## Fejlesztői megjegyzések
+## Technikai megjegyzések
 
-- Build tool nélküli, egyetlen `index.html` fájl
-- A service worker az app gyökerében van (`./service-worker.js`) — scope: `./`
-- CDN scriptek (Dexie, Chart.js, Tesseract.js) az első betöltés után cache-elődnek offline használatra
-- Update flow: ha új SW vár, egy toast jelenik meg a „Frissítés / Újratöltés" gombbal
+- **Adattárolás:** IndexedDB (Dexie.js) — minden adat kizárólag a böngészőben tárolódik
+- **Offline működés:** Az első betöltés után teljesen offline is fut
+- **CDN-függőségek:** Dexie.js, Chart.js, Tesseract.js — első használat után a service worker cache-eli őket
+- **Nincs backend, nincs fizetős API, nincs regisztráció**
