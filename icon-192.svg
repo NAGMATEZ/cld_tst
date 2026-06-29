@@ -1,15 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
-  <!-- Rounded square background -->
-  <rect width="192" height="192" rx="44" fill="#4f46e5"/>
-  <!-- Wallet body -->
-  <rect x="30" y="66" width="132" height="84" rx="14" fill="white" opacity="0.95"/>
-  <!-- Wallet top flap -->
-  <rect x="30" y="52" width="132" height="32" rx="12" fill="white"/>
-  <!-- Coin pocket -->
-  <rect x="110" y="88" width="40" height="40" rx="20" fill="#4f46e5" opacity="0.15"/>
-  <circle cx="130" cy="108" r="14" fill="#4f46e5" opacity="0.25"/>
-  <circle cx="130" cy="108" r="8" fill="#4f46e5" opacity="0.6"/>
-  <!-- Card lines -->
-  <rect x="44" y="100" width="48" height="5" rx="2.5" fill="#4f46e5" opacity="0.3"/>
-  <rect x="44" y="114" width="32" height="5" rx="2.5" fill="#4f46e5" opacity="0.2"/>
+  <rect width="192" height="192" rx="38" fill="#1a1f2e"/>
+  <rect x="28" y="72" width="136" height="88" rx="12" fill="#2d3550"/>
+  <rect x="28" y="84" width="136" height="12" fill="#4f6ef7"/>
+  <rect x="40" y="108" width="32" height="8" rx="4" fill="#4f6ef7" opacity="0.7"/>
+  <rect x="40" y="124" width="48" height="6" rx="3" fill="#6b7694" opacity="0.6"/>
+  <rect x="120" y="108" width="32" height="8" rx="4" fill="#22d3a5" opacity="0.9"/>
+  <circle cx="96" cy="60" r="20" fill="#4f6ef7"/>
+  <text x="96" y="67" text-anchor="middle" font-size="20" fill="white" font-family="sans-serif">₣</text>
 </svg>
