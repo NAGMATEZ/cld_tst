@@ -1,13 +1,12 @@
 {
   "name": "Budget Manager",
   "short_name": "Budget",
-  "description": "Személyes költségvetés-kezelő – offline-first PWA",
+  "description": "Offline-first személyes költségvetés-kezelő",
   "start_url": ".",
   "display": "standalone",
   "orientation": "portrait",
-  "theme_color": "#4f46e5",
-  "background_color": "#f8fafc",
-  "lang": "hu",
+  "theme_color": "#1a1f2e",
+  "background_color": "#1a1f2e",
   "icons": [
     {
       "src": "icon-192.svg",
@@ -21,7 +20,5 @@
       "type": "image/svg+xml",
       "purpose": "any maskable"
     }
-  ],
-  "categories": ["finance", "productivity"],
-  "screenshots": []
+  ]
 }
