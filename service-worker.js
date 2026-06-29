@@ -1,74 +1,87 @@
-/* ============================================================
-   Budget Manager – Service Worker (cache-first)
-   ============================================================ */
+// Budget Manager PWA — Service Worker
+// Cache-first strategy for all local assets + CDN caching on first use
 
-const CACHE_NAME = 'budget-manager-v1';
+const CACHE_NAME = 'budget-pwa-v1';
 
-// Local assets cached at install time
-const STATIC_ASSETS = [
+// Core assets to cache on install (app shell)
+const PRECACHE_URLS = [
   '.',
   'index.html',
   'manifest.json',
   'service-worker.js',
   'icon-192.svg',
-  'icon-512.svg'
+  'icon-512.svg',
 ];
 
-// CDN assets cached at install time so the app works fully offline
-const CDN_ASSETS = [
-  'https://unpkg.com/dexie/dist/dexie.js',
-  'https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js',
-  'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'
+// CDN assets cached on first use
+const CDN_HOSTS = [
+  'unpkg.com',
+  'cdn.jsdelivr.net',
+  'cdnjs.cloudflare.com',
 ];
 
-// ── Install: pre-cache everything ─────────────────────────────
-self.addEventListener('install', event => {
+// ── Install: pre-cache app shell ──────────────────────────────────────────────
+self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache =>
-      cache.addAll([...STATIC_ASSETS, ...CDN_ASSETS])
-        .catch(err => {
-          // If a CDN asset fails, cache what we can (local assets are critical)
-          console.warn('[SW] Some CDN assets failed to pre-cache:', err);
-          return cache.addAll(STATIC_ASSETS);
-        })
-    )
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(PRECACHE_URLS);
+    })
   );
+  // Don't skipWaiting here — let the update flow handle it via message
 });
 
-// ── Activate: clean old caches ────────────────────────────────
-self.addEventListener('activate', event => {
+// ── Activate: clean old caches ────────────────────────────────────────────────
+self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then(keys =>
+    caches.keys().then((keys) =>
       Promise.all(
-        keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
+        keys
+          .filter((key) => key !== CACHE_NAME)
+          .map((key) => caches.delete(key))
       )
     ).then(() => self.clients.claim())
   );
 });
 
-// ── Fetch: cache-first, fall back to network & cache ─────────
-self.addEventListener('fetch', event => {
+// ── Fetch: cache-first for local; cache-on-first-use for CDN ─────────────────
+self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+
   // Only handle GET requests
   if (event.request.method !== 'GET') return;
 
-  event.respondWith(
-    caches.match(event.request).then(cached => {
-      if (cached) return cached;
-
-      return fetch(event.request).then(response => {
-        // Cache successful responses (not opaque/error)
-        if (response && response.status === 200 && response.type !== 'opaque') {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+  // CDN resources: cache on first use (stale-while-revalidate)
+  const isCDN = CDN_HOSTS.some((host) => url.hostname.includes(host));
+  if (isCDN) {
+    event.respondWith(
+      caches.open(CACHE_NAME).then(async (cache) => {
+        const cached = await cache.match(event.request);
+        if (cached) return cached;
+        try {
+          const response = await fetch(event.request);
+          if (response.ok) cache.put(event.request, response.clone());
+          return response;
+        } catch {
+          return cached || new Response('Offline', { status: 503 });
         }
-        // Also cache opaque CDN responses (cross-origin with no CORS)
-        if (response && response.type === 'opaque') {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+      })
+    );
+    return;
+  }
+
+  // Local assets: cache-first
+  event.respondWith(
+    caches.match(event.request).then((cached) => {
+      if (cached) return cached;
+      return fetch(event.request).then((response) => {
+        if (response.ok) {
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, response.clone());
+          });
         }
         return response;
       }).catch(() => {
-        // Offline fallback for navigation requests
+        // Return index.html for navigation requests (SPA fallback)
         if (event.request.mode === 'navigate') {
           return caches.match('index.html');
         }
@@ -77,9 +90,9 @@ self.addEventListener('fetch', event => {
   );
 });
 
-// ── Message: skipWaiting on demand ────────────────────────────
-self.addEventListener('message', event => {
-  if (event.data === 'skipWaiting') {
+// ── Message: skipWaiting on user request ──────────────────────────────────────
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
 });
